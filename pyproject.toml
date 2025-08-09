@@ -1,7 +1,10 @@
 [project]
 name = "elementreactor-tools"
 version = "0.1.0"
-description = "Add your description here"
+description = "化学方程式反应物回填工具"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []
+
+[project.scripts]
+reaction-backfill = "csv_backfill:main"
