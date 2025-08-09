@@ -1,28 +1,30 @@
 import sys
 from pathlib import Path
 
-from elementreactor_tools import ReactionBackfiller
+# 使用最终工作版本
+from reaction_backfill import process_csv_actual_format
 
 
 def main():
     if len(sys.argv) != 2:
+        print("🔧 化学方程式反应物回填工具")
+        print()
         print("用法: python main.py <csv文件路径>")
-        print("示例: python main.py example_reactions.csv")
+        print("示例: python main.py correct_reactions.csv")
         return
     
     csv_file = sys.argv[1]
     
     if not Path(csv_file).exists():
-        print(f"错误: 文件 '{csv_file}' 不存在")
+        print(f"❌ 错误: 文件 '{csv_file}' 不存在")
         return
     
-    backfiller = ReactionBackfiller(csv_file)
-    result = backfiller.process_file()
+    success = process_csv_actual_format(csv_file)
     
-    if result['success']:
-        print(f"✅ 处理成功: {result['message']}")
+    if success:
+        print("✅ 处理完成！")
     else:
-        print(f"❌ 处理失败: {result['message']}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

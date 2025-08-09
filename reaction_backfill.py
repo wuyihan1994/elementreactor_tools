@@ -2,8 +2,11 @@
 """
 化学方程式反应物回填工具 - 100%工作版本
 
-功能：读取CSV文件中的化学方程式，解析反应物并回填到reactants列
-CSV格式：前3行为格式说明，第4行为标题，第5行开始为数据
+实际文件格式：
+- 第0行：标题行（包含所有列名）
+- 第1行：中文描述
+- 第2行：数据类型
+- 第3行开始：实际数据内容
 """
 
 import csv
@@ -12,7 +15,7 @@ import sys
 from pathlib import Path
 
 
-def parse_reactants(equation):
+def parse_reactants_from_equation(equation):
     """从化学方程式中提取反应物列表"""
     if not equation or not equation.strip():
         return []
@@ -44,80 +47,90 @@ def parse_reactants(equation):
     return reactants
 
 
-def process_reactions(input_file, output_file=None):
-    """处理反应CSV文件"""
+def process_csv_actual_format(input_file, output_file=None):
+    """处理实际格式的CSV文件"""
+    input_path = Path(input_file)
+    
+    if not input_path.exists():
+        print(f"❌ 错误: 文件不存在: {input_file}")
+        return False
+    
     if output_file is None:
         output_file = input_file
     
     try:
-        with open(input_file, 'r', encoding='utf-8') as f:
-            lines = f.readlines()
+        # 读取所有行
+        with open(input_path, 'r', encoding='utf-8') as f:
+            reader = csv.reader(f)
+            rows = list(reader)
         
-        if len(lines) < 5:
-            print("❌ 错误: 文件至少需要5行")
+        if len(rows) < 4:
+            print("❌ 错误: 文件至少需要4行（标题+中文+类型+数据）")
             return False
         
-        # 分离格式说明和数据
-        format_lines = lines[:3]  # 前3行格式说明
-        header_line = lines[3]    # 第4行标题
-        data_lines = lines[4:]    # 第5行开始是数据
+        # 分离格式描述和数据
+        format_rows = rows[:3]  # 前3行：标题、中文、类型
+        data_rows = rows[3:]    # 从第4行开始是数据
         
-        # 解析标题
-        headers = header_line.strip().split(',')
+        print(f"📊 文件结构:")
+        print(f"  标题行: {rows[0]}")
+        print(f"  数据行数: {len(data_rows)}")
+        
+        # 获取标题行
+        headers = rows[0]
         
         # 找到列索引
-        if 'reaction_equation' not in headers or 'reactants' not in headers:
-            print(f"❌ 错误: 找不到reaction_equation或reactants列")
-            print(f"可用列: {headers}")
+        try:
+            equation_idx = headers.index('reaction_equation')
+            reactants_idx = headers.index('reactants')
+            print(f"  ✅ 找到列: reaction_equation={equation_idx}, reactants={reactants_idx}")
+        except ValueError as e:
+            print(f"❌ 错误: 找不到列 {e}")
+            print(f"  可用列: {headers}")
             return False
         
-        equation_idx = headers.index('reaction_equation')
-        reactants_idx = headers.index('reactants')
-        
-        # 处理数据
-        updated_lines = format_lines + [header_line]
+        # 处理数据行
+        updated_rows = rows[:3]  # 保留前3行（格式描述）
         processed_count = 0
         
-        for line_num, line in enumerate(data_lines, 5):
-            line = line.strip()
-            if not line:
-                continue
-            
-            # 处理CSV行
-            parts = line.split(',')
-            
-            if len(parts) > max(equation_idx, reactants_idx):
-                equation = parts[equation_idx] if equation_idx < len(parts) else ''
-                current_reactants = parts[reactants_idx] if reactants_idx < len(parts) else ''
+        for row_num, row in enumerate(data_rows, 4):  # 从第4行开始编号
+            if len(row) > max(equation_idx, reactants_idx):
+                equation = row[equation_idx] if equation_idx < len(row) else ''
+                current_reactants = row[reactants_idx] if reactants_idx < len(row) else ''
                 
                 # 解析反应物
-                reactants = parse_reactants(equation)
-                new_reactants = '|'.join(reactants)
+                reactants = parse_reactants_from_equation(equation)
+                reactants_str = '|'.join(reactants)
                 
-                # 更新反应物列
-                if reactants_idx < len(parts):
-                    parts[reactants_idx] = new_reactants
-                else:
-                    parts.extend([''] * (reactants_idx - len(parts) + 1))
-                    parts[reactants_idx] = new_reactants
+                # 确保行长度足够
+                if len(row) <= reactants_idx:
+                    row.extend([''] * (reactants_idx - len(row) + 1))
                 
-                print(f"行 {line_num-4}: '{current_reactants}' → '{new_reactants}'")
-                if equation:
-                    print(f"  方程式: {equation}")
+                # 回填到reactants列
+                old_value = row[reactants_idx]
+                row[reactants_idx] = reactants_str
+                
+                print(f"  行 {row_num}: '{old_value}' → '{reactants_str}'")
+                if equation and equation != current_reactants:
+                    print(f"    方程式: {equation}")
                 
                 processed_count += 1
             
-            updated_lines.append(','.join(parts) + '\n')
+            updated_rows.append(row)
         
         # 写回文件
-        with open(output_file, 'w', encoding='utf-8') as f:
-            f.writelines(updated_lines)
+        with open(output_file, 'w', encoding='utf-8', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerows(updated_rows)
         
         print(f"✅ 成功处理 {processed_count} 行数据")
+        print(f"📁 结果已保存到: {output_file}")
         return True
         
     except Exception as e:
-        print(f"❌ 错误: {e}")
+        print(f"❌ 处理错误: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
@@ -138,13 +151,12 @@ def main():
     input_file = sys.argv[1]
     output_file = sys.argv[2] if len(sys.argv) > 2 else None
     
-    print(f"🚀 开始处理: {input_file}")
-    
     if not Path(input_file).exists():
         print(f"❌ 错误: 文件不存在: {input_file}")
         return
     
-    success = process_reactions(input_file, output_file)
+    print(f"🚀 开始处理: {input_file}")
+    success = process_csv_actual_format(input_file, output_file)
     
     if success:
         print("✅ 处理完成！")
